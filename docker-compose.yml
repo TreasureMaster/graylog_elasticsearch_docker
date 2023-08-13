@@ -1,0 +1,111 @@
+version: '3'
+services:
+
+  # MongoDB: https://hub.docker.com/_/mongo/
+  mongodb:
+    image: mongo:4.2
+    container_name: mongodb_graylog
+    hostname: mongodb
+    networks:
+      - graylog-net
+  # БД расшарена для сохранения данных
+    volumes:
+      - mongo_data:/data/db
+
+  # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2
+  #   # папка с данными расшарена для сохранения данных
+  #   volumes:
+  #     - /es_data:/usr/share/elasticsearch/data
+  #   environment:
+  #     - http.host=0.0.0.0
+  #     - transport.host=localhost
+  #     - network.host=0.0.0.0
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  #   ulimits:
+  #     memlock:
+  #       soft: -1
+  #       hard: -1
+  #   mem_limit: 1g
+  #   networks:
+  #     - graylog
+
+  elasticsearch:
+    image: elasticsearch:7.17.1
+    container_name: elasticsearch_graylog
+    hostname: elasticsearch
+    restart: always
+    environment:
+      - http.host=0.0.0.0
+      - transport.host=localhost
+      - network.host=0.0.0.0
+      - xpack.security.enabled=true
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+      - 9300:9300
+    networks:
+      - graylog-net
+
+  # Graylog: https://hub.docker.com/r/graylog/graylog/
+  graylog:
+    image: graylog/graylog:4.2
+    container_name: graylog
+    hostname: graylog
+    # каталоги журнала и конфигурации в локальной NFS расшарены для сохранения данных
+    volumes:
+      - graylog_journal:/usr/share/graylog/data/journal
+    environment:
+      # CHANGE ME (должно быть не менее 16 символов)!
+      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
+      # Пароль: admin
+      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
+      - GRAYLOG_HTTP_EXTERNAL_URI=${GRAYLOG_HTTP_EXTERNAL_URI}
+    entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
+    networks:
+      - graylog-net
+    # links:
+    #   - mongodb:mongo
+    #   - elasticsearch
+    restart: always
+    depends_on:
+      - mongodb
+      - elasticsearch
+    ports:
+      # Веб-интерфейс Graylog и REST API
+      - 9000:9000
+      # Syslog TCP
+      - 1514:1514
+      # Syslog UDP
+      - 1514:1514/udp
+      # GELF TCP
+      - 12201:12201
+      # GELF UDP
+      - 12201:12201/udp
+
+# Тома для сохранения данных, см. https://docs.docker.com/engine/admin/volumes/volumes/
+volumes:
+  mongo_data:
+    # driver: local
+  elasticsearch-data:
+    # driver: local
+  graylog_journal:
+    # driver: local
+
+networks:
+    graylog-net:
+      # driver: bridge
