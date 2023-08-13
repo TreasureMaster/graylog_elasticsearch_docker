@@ -4,36 +4,21 @@ services:
   # MongoDB: https://hub.docker.com/_/mongo/
   mongodb:
     image: mongo:4.2
-    container_name: mongodb_graylog
+    container_name: mongodb
     hostname: mongodb
+    # environment: 
+      # - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      # - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      # - MONGO_INITDB_DATABASE=graylog
     networks:
       - graylog-net
   # БД расшарена для сохранения данных
     volumes:
       - mongo_data:/data/db
 
-  # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
-  # elasticsearch:
-  #   image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.10.2
-  #   # папка с данными расшарена для сохранения данных
-  #   volumes:
-  #     - /es_data:/usr/share/elasticsearch/data
-  #   environment:
-  #     - http.host=0.0.0.0
-  #     - transport.host=localhost
-  #     - network.host=0.0.0.0
-  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-  #   ulimits:
-  #     memlock:
-  #       soft: -1
-  #       hard: -1
-  #   mem_limit: 1g
-  #   networks:
-  #     - graylog
-
   elasticsearch:
     image: elasticsearch:7.17.1
-    container_name: elasticsearch_graylog
+    container_name: elasticsearch
     hostname: elasticsearch
     restart: always
     environment:
@@ -69,18 +54,20 @@ services:
     # каталоги журнала и конфигурации в локальной NFS расшарены для сохранения данных
     volumes:
       - graylog_journal:/usr/share/graylog/data/journal
+      # MONGODB_URI=mongodb://user:password@localhost:27017/graylog
     environment:
       # CHANGE ME (должно быть не менее 16 символов)!
       - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
       # Пароль: admin
       - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
       - GRAYLOG_HTTP_EXTERNAL_URI=${GRAYLOG_HTTP_EXTERNAL_URI}
+      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://${ELASTICSEARCH_USERNAME}:${ELASTIC_PASSWORD}@elasticsearch:9200
+      # - GRAYLOG_MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      # - GRAYLOG_MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
     networks:
       - graylog-net
-    # links:
-    #   - mongodb:mongo
-    #   - elasticsearch
     restart: always
     depends_on:
       - mongodb
@@ -90,8 +77,14 @@ services:
       - 9000:9000
       # Syslog TCP
       - 1514:1514
+      - 1515:1515
+      - 1516:1516
+      - 1517:1517
       # Syslog UDP
       - 1514:1514/udp
+      - 1515:1515/udp
+      - 1516:1516/udp
+      - 1517:1517/udp
       # GELF TCP
       - 12201:12201
       # GELF UDP
@@ -100,12 +93,8 @@ services:
 # Тома для сохранения данных, см. https://docs.docker.com/engine/admin/volumes/volumes/
 volumes:
   mongo_data:
-    # driver: local
   elasticsearch-data:
-    # driver: local
   graylog_journal:
-    # driver: local
 
 networks:
     graylog-net:
-      # driver: bridge
